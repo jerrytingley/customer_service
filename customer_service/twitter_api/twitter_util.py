@@ -53,11 +53,24 @@ def is_reply(status):
         return True
     return False
 
+def status_exists(status):
+	return Tweet.objects.filter(tweet_id=status['id']).exists()
+
 # Retrieves a single status
 def get_status(tweet_id):
 	return api.GetStatus(tweet_id).AsDict()
 
+# Retrieves count amount of statuses
+def get_statuses(screen_name, count=DEFAULT_STATUS_COUNT):
+	all_statuses = api.GetUserTimeline(screen_name=screen_name,
+							   		   include_rts=False,
+							   		   exclude_replies=False,
+							   		   count=count)
+
+	return [status.AsDict() for status in all_statuses]
+
 def process_text(status):
+	status_text = status['text']
 	if 'user_mentions' in status:
 		for mention in status['user_mentions']:
 			screen_name = "@" + mention['screen_name']
@@ -74,7 +87,7 @@ def process_text(status):
 def status_to_tweet(status):
 	tweet_created_at = created_at_to_datetime(status['created_at'])
 	tweet_id = status['id']
-	tweet_text = process_text(status['text'])
+	tweet_text = process_text(status)
 	screen_name = status['user']['screen_name']
 	in_reply_to_status_id = status.get(REPLY_ID, None)
 	in_reply_to_screen_name = status.get(REPLY_NAME, None)
@@ -88,14 +101,6 @@ def status_to_tweet(status):
 
 	return tweet
 
-# Retrieves count amount of statuses
-def get_statuses(screen_name, count=DEFAULT_STATUS_COUNT):
-	all_statuses = api.GetUserTimeline(screen_name=screen_name,
-							   		   include_rts=False,
-							   		   exclude_replies=False,
-							   		   count=count)
-
-	return [status for status in all_statuses]
 
 """
 def get_reply_statuses(original_status):
@@ -118,8 +123,13 @@ def add_statuses_to_db(statuses):
 	for status in statuses:
 		status_to_tweet(status)
 
+# This function only needs to create a new TweetConversation and add Tweets to it!!
+# This function takes a status from a customer service account, discovers
+# the whole conversation that it's in, creates a new TweetConversation
+# and adds it to the database. The beauty of find_reply_chain and find_reply_chains
+# is that find_reply_chain only needs one status in the conversation to
+# discover the whole conversation which includes the elusive t_n+1 status.
 def find_reply_chain(service_status):
-	service_status = service_status.AsDict()
 	service_screen_name = service_status['user']['screen_name']
 
 	"""
@@ -130,49 +140,53 @@ def find_reply_chain(service_status):
 	"""
 	customer_screen_name = service_status['user_mentions'][0]['screen_name'] # Iterate
 
-	# This is t0
-	service_status['text'] = process_text(service_status)
-	if not is_reply(service_status):
-		new_conversation = TweetConversation.objects.create(user_screen_name=customer_screen_name,
-											 				customer_service_screen_name=service_screen_name)
-		new_conversation.tweets.add(status_to_tweet(service_status))
+	#service_status['text'] = process_text(service_status)
 
-		return new_conversation
+	# If we discover a part of the conversation that belongs to an existing conversation
+	if TweetConversation.objects.filter(user_screen_name=customer_screen_name,
+										customer_service_screen_name=service_screen_name).exists():
+		conversation = TweetConversation.objects.get(user_screen_name=customer_screen_name,
+													 customer_service_screen_name=service_screen_name)
+
 	else:
-		if not TweetConversation.objects.filter(user_screen_name=customer_screen_name,
-												customer_service_screen_name=service_screen_name).exists():
-			search_statuses0, search_statuses1 = get_search(service_screen_name, customer_screen_name)
-			print
-			print search_statuses0
-			print "Search 0:"
-			for s0 in search_statuses0:
-				p(s0.AsDict())
-				print
-			print "Seach 1:"
-			for s1 in search_statuses1:
-				p(s1.AsDict())
-				print
+		conversation = TweetConversation.objects.create(user_screen_name=customer_screen_name,
+														customer_service_screen_name=service_screen_name)
 
-			search_set0 = set([status_to_tweet(s0) for s0 in search_statuses0])
-			search_set1 = set([status_to_tweet(s1) for s1 in search_statuses1])
-			total_tweet = search_set0 | search_set1
-			"""
+	search_statuses0, search_statuses1 = get_search(service_screen_name, customer_screen_name)
 
-			conversation = TweetConversation.objects.filter(user_screen_name=customer_screen_name,
-															customer_service_screen_name=service_screen_name)
-			for tweet in total_tweet:
-				conversation.tweets.add(tweet)
-			"""
+	print
+	print search_statuses0
+	print "Search 0:"
+	for s0 in search_statuses0:
+		p(s0)
+		print
+	print "Seach 1:"
+	for s1 in search_statuses1:
+		p(s1)
+		print
 
+	search_set0 = set([status_to_tweet(s0) if not status_exists(s0) for s0 in search_statuses0])
+	search_set1 = set([status_to_tweet(s1) if not status_exists(s1) for s1 in search_statuses1])
+	total_tweet = search_set0 | search_set1
+
+	for tweet in total_tweet:
+		conversation.tweets.add(tweet)
+
+	return conversation
+
+# We may find additional Tweets in an existing conversation and should check for that
 def find_reply_chains(service_screen_name):
 	for status in get_statuses(service_screen_name, count=5):
-		status = status.AsDict()
-		if (status['lang'] == 'en') and (not Tweet.objects.filter(tweet_id=status['id']).exists()):
+		english = status['lang'] == 'en'
+		tweet_exists = Tweet.objects.filter(tweet_id=status['id']).exists() # Make sure this Tweet doesn't already exist. For overlapping searches.
+		conversation_exists = TweetConversation.objects.filter(customer_service_screen_name=status[REPLY_NAME]).exists() # Make sure this is the first time we're seeing this conversation
+		if english and not tweet_exists:
 			print " 	Discovering reply chains..."
 			tweet_conversation = find_reply_chain(status)
 		else:
 			print "Else"
-			print status['lang'] == 'en'
+			print english
 			print status['lang']
-			print not Tweet.objects.filter(tweet_id=status['id']).exists()
+			print tweet_exists
+			print conversation_exists
 			print
