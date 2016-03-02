@@ -18,13 +18,23 @@ class Tweet(models.Model):
 	in_reply_to_status_id = models.CharField(max_length=32, null=True)
 	in_reply_to_screen_name = models.CharField(max_length=16, null=True)
 
+	def __unicode__(self):
+		return self.tweet_text
+
 	class Meta:
-		ordering = ['tweet_created_at']
+		ordering = ['-tweet_created_at']
+
 
 class TweetConversation(models.Model):
 	created_at = models.DateTimeField(default=tz_now)
 	user_screen_name = models.CharField(max_length=16)
 	customer_service_screen_name = models.CharField(max_length=16)
 	tweets = models.ManyToManyField(Tweet)
+
+	def __unicode__(self):
+		return "{0} - {1}".format(self.customer_service_screen_name, self.user_screen_name)
+
+	class Meta:
+		ordering = ['-created_at']
 
 # TweetConversation.tweets.all() should return all tweets in proper order
