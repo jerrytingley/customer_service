@@ -15,11 +15,11 @@ from pprint import pprint as p
 # Constants
 REPLY_ID = 'in_reply_to_status_id'
 REPLY_NAME = 'in_reply_to_screen_name'
-DEFAULT_STATUS_COUNT = 50
+DEFAULT_STATUS_COUNT = 150
 
 # OAuth information, apps.twitter.com
-consumer_key = 'DsxRHf73C6o2HLHIrFQSisrUp'
-consumer_secret = 'lN5tvuZpNWAH3TkMWboBEplTmvezNSUp1c445iglizzJVVLeAN'
+consumer_key = 'mvToNEvVDCLII8ex7oUHEJmv4'
+consumer_secret = 'hj6ubN8riXTvHlUFKtn6TProLBQkxcUsZCL2xgiEX866xkNe2v'
 access_token_key = '4896491896-OM3jLihqIf6xImy62pS2t1xP3M9Z9gZavPQ86kA'
 access_token_secret = '57L7TvOtHjADtEpkQsi30612zifAjgr3DsaC3m9RHzogt'
 
@@ -27,10 +27,15 @@ api = twitter.Api(consumer_key=consumer_key,
 				  consumer_secret=consumer_secret,
 				  access_token_key=access_token_key,
 				  access_token_secret=access_token_secret)
-
+"""
 def get_search_string(service_screen_name, customer_screen_name, count=DEFAULT_STATUS_COUNT):
 	return ("q=from%3A{0}%20to%3A{1}&count={2}".format(service_screen_name, customer_screen_name, count),
 			"q=from%3A{0}%20to%3A{1}&count={2}".format(customer_screen_name, service_screen_name, count))
+"""
+
+def get_search_string(service_screen_name, customer_screen_name, count=DEFAULT_STATUS_COUNT):
+	return ("q=from%3A{0}%20%40{1}&count={2}".format(service_screen_name, customer_screen_name, count),
+			"q=from%3A{0}%20%40{1}&count={2}".format(customer_screen_name, service_screen_name, count))
 
 def get_search(service_screen_name, customer_screen_name, count=DEFAULT_STATUS_COUNT):
 	search_string0, search_string1 = get_search_string(service_screen_name, customer_screen_name, count)
@@ -103,9 +108,8 @@ def status_to_tweet(status):
 
 def check_status(status):
 	exists = status_exists(status)
-	in_conversation = TweetConversation.objects.filter(tweets__tweet_id=status['id']).exists()
 
-	return not exists and not in_conversation
+	return not exists
 
 # This function only needs to create a new TweetConversation and add Tweets to it!!
 # This function takes a status from a customer service account, discovers
@@ -136,14 +140,22 @@ def find_reply_chain(service_status):
 
 	search_statuses0, search_statuses1 = get_search(service_screen_name, customer_screen_name)
 
-	#search_set0 = set([status_to_tweet(s0) for s0 in search_statuses0 if not status_exists(s0)])
-	#search_set1 = set([status_to_tweet(s1) for s1 in search_statuses1 if not status_exists(s1)])
-	search_set0 = set([status_to_tweet(s0) for s0 in search_statuses0 if check_status(s0)])
-	search_set1 = set([status_to_tweet(s1) for s1 in search_statuses1 if check_status(s1)])
+	search_set0 = set([status_to_tweet(s0) for s0 in search_statuses0 if not status_exists(s0)])
+	search_set1 = set([status_to_tweet(s1) for s1 in search_statuses1 if not status_exists(s1)])
 	total_tweet = search_set0 | search_set1
 
 	for tweet in total_tweet:
 		conversation.tweets.add(tweet)
+
+	for tweet in conversation.tweets.all():
+		reply_id = tweet.in_reply_to_status_id
+
+		# Check if this tweet is a reply and if we have the original Tweet in the DB
+		if reply_id != None and not conversation.tweets.filter(in_reply_to_status_id=reply_id).exists():
+			new_status = get_status(reply_id)
+			new_tweet = status_to_tweet(new_status)
+
+			conversation.tweets.add(new_tweet)
 
 	return conversation
 
@@ -151,13 +163,14 @@ def find_reply_chain(service_status):
 def find_reply_chains(service_screen_name):
 	for status in get_statuses(service_screen_name, count=DEFAULT_STATUS_COUNT):
 		english = status['lang'] == 'en'
-		tweet_exists = Tweet.objects.filter(tweet_id=status['id']).exists() # Make sure this Tweet doesn't already exist. For overlapping searches.
+		tweet_exists = status_exists(status)
+
 		if english and not tweet_exists:
-			print " 	Discovering reply chains..."
+			print "[*] Discovering reply chains..."
 			tweet_conversation = find_reply_chain(status)
 		else:
-			print "Else"
-			print english
-			print status['lang']
-			print tweet_exists
+			if not english:
+				print "[!] Skipping, language is: " + status['lang']
+			if tweet_exists:
+				print "[!] Skipping, status already exists"
 			print
