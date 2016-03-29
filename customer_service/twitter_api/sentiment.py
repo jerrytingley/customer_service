@@ -3,6 +3,14 @@ from nltk.tokenize import TweetTokenizer
 # import sentiwordnet
 from .models import Tweet, TweetConversation
 
+# All Tweets authored by a customer service account end with the initials of
+# the author, usually in the form "^AB", sometimes omitting the "^". This
+# function will extract those initials.
+def extract_initials(tweet_text):
+	initials = tweet_text[-3:]
+
+	return initials
+
 # This class processes a Tweet and applies a few rules to transform the text.
 #class Preprocessor(object):
 class Processor(object):

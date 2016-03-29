@@ -6,6 +6,8 @@
 import time
 import twitter
 
+import pytz
+
 from datetime import datetime, timedelta
 from email.utils import parsedate_tz
 
@@ -34,23 +36,32 @@ def get_search_string(service_screen_name, customer_screen_name, count=DEFAULT_S
 """
 
 def get_search_string(service_screen_name, customer_screen_name, count=DEFAULT_STATUS_COUNT):
-	return ("q=from%3A{0}%20%40{1}&count={2}".format(service_screen_name, customer_screen_name, count),
-			"q=from%3A{0}%20%40{1}&count={2}".format(customer_screen_name, service_screen_name, count))
+	search_string = "q=%28from%3A{0}%20%40{1}%29".format(service_screen_name, customer_screen_name)
+	search_string += "%20OR%20"
+	search_string += "%28from%3A{0}%20%40{1}%29&count={2}".format(customer_screen_name, service_screen_name, count)
+
+	return search_string
 
 def get_search(service_screen_name, customer_screen_name, count=DEFAULT_STATUS_COUNT):
-	search_string0, search_string1 = get_search_string(service_screen_name, customer_screen_name, count)
-	searches0 = api.GetSearch(raw_query=search_string0)
-	searches1 = api.GetSearch(raw_query=search_string1)
+	search_string = get_search_string(service_screen_name, customer_screen_name, count)
+	search = api.GetSearch(raw_query=search_string)
 
-	return ([s0.AsDict() for s0 in searches0],
-			[s1.AsDict() for s1 in searches1])
+	return [s.AsDict() for s in search]
 
+"""
 # Converts the Date Time string from the value of status's key 'created_at'.
 # http://stackoverflow.com/a/7704266
 def created_at_to_datetime(created_at):
     time_tuple = parsedate_tz(created_at.strip())
     dt = datetime(*time_tuple[:6])
     return dt - timedelta(seconds=time_tuple[-1])
+"""
+
+def created_at_to_datetime(created_at):
+	str_format = '%a %b %d %H:%M:%S +0000 %Y'
+	date_time = datetime.strptime(created_at, str_format).replace(tzinfo=pytz.UTC)
+
+	return date_time
 
 # Checks if REPLY_ID exists
 def is_reply(status):
@@ -74,6 +85,7 @@ def get_statuses(screen_name, count=DEFAULT_STATUS_COUNT):
 
 	return [status.AsDict() for status in all_statuses]
 
+"""
 def process_text(status):
 	status_text = status['text']
 	if 'user_mentions' in status:
@@ -87,12 +99,13 @@ def process_text(status):
 			status_text = status_text.replace(hash_tag, '')
 
 	return status_text
+"""
 
 # Converts a Status object returned from get_status to create a a new Tweet.
 def status_to_tweet(status):
 	tweet_created_at = created_at_to_datetime(status['created_at'])
 	tweet_id = status['id']
-	tweet_text = process_text(status)
+	tweet_text = status['text'] #process_text(status)
 	screen_name = status['user']['screen_name']
 	in_reply_to_status_id = status.get(REPLY_ID, None)
 	in_reply_to_screen_name = status.get(REPLY_NAME, None)
@@ -105,11 +118,6 @@ def status_to_tweet(status):
 								 in_reply_to_screen_name=in_reply_to_screen_name)
 
 	return tweet
-
-def check_status(status):
-	exists = status_exists(status)
-
-	return not exists
 
 # This function only needs to create a new TweetConversation and add Tweets to it!!
 # This function takes a status from a customer service account, discovers
@@ -126,7 +134,8 @@ def find_reply_chain(service_status):
 		if mention['screen_name'] is not service_screen_name:
 			customer_service_screen_name = mention['screen_name']
 	"""
-	customer_screen_name = service_status['user_mentions'][0]['screen_name'] # Iterate
+
+	customer_screen_name = service_status['in_reply_to_screen_name'] #service_status['user_mentions'][0]['screen_name'] # Iterate
 
 	# If we discover a part of the conversation that belongs to an existing conversation
 	if TweetConversation.objects.filter(user_screen_name=customer_screen_name,
@@ -138,24 +147,26 @@ def find_reply_chain(service_status):
 		conversation = TweetConversation.objects.create(user_screen_name=customer_screen_name,
 														customer_service_screen_name=service_screen_name)
 
-	search_statuses0, search_statuses1 = get_search(service_screen_name, customer_screen_name)
+	search_statuses = get_search(service_screen_name, customer_screen_name)
 
-	search_set0 = set([status_to_tweet(s0) for s0 in search_statuses0 if not status_exists(s0)])
-	search_set1 = set([status_to_tweet(s1) for s1 in search_statuses1 if not status_exists(s1)])
-	total_tweet = search_set0 | search_set1
+	for search_status in search_statuses:
+		if not status_exists(search_status):
+			search_tweet = status_to_tweet(search_status)
+			conversation.tweets.add(search_tweet)
 
-	for tweet in total_tweet:
-		conversation.tweets.add(tweet)
-
-	for tweet in conversation.tweets.all():
-		reply_id = tweet.in_reply_to_status_id
-
-		# Check if this tweet is a reply and if we have the original Tweet in the DB
-		if reply_id != None and not conversation.tweets.filter(in_reply_to_status_id=reply_id).exists():
-			new_status = get_status(reply_id)
-			new_tweet = status_to_tweet(new_status)
-
-			conversation.tweets.add(new_tweet)
+	t0 = conversation.tweets.first()
+	try:
+		if t0.in_reply_to_status_id != None:
+			reply_id = t0.in_reply_to_status_id
+			try:
+				if not conversation.tweets.filter(tweet_id=reply_id).exists():
+					print "[!] Discovered seperate status ({0})".format(reply_id)
+					outside_reply = get_status(reply_id)
+					conversation.tweets.add(status_to_tweet(outside_reply))
+			except twitter.TwitterError:
+				print "[!] Was not able to retrieve status ({0})".format(reply_id)
+	except Exception:
+		pass
 
 	return conversation
 
@@ -164,8 +175,9 @@ def find_reply_chains(service_screen_name):
 	for status in get_statuses(service_screen_name, count=DEFAULT_STATUS_COUNT):
 		english = status['lang'] == 'en'
 		tweet_exists = status_exists(status)
+		account_exists = is_reply(status) and REPLY_NAME in status
 
-		if english and not tweet_exists:
+		if english and not tweet_exists and account_exists:
 			print "[*] Discovering reply chains..."
 			tweet_conversation = find_reply_chain(status)
 		else:
@@ -173,4 +185,10 @@ def find_reply_chains(service_screen_name):
 				print "[!] Skipping, language is: " + status['lang']
 			if tweet_exists:
 				print "[!] Skipping, status already exists"
-			print
+
+# Returns a TweetConversation if a Tweet with tweet_id exists in it's tweets
+def get_tweet_conversation_by_tweet(tweet_id):
+	try:
+		return TweetConversation.objects.filter(tweets__tweet_id=tweet_id)[0]
+	except Exception:
+		return None

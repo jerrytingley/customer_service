@@ -3,9 +3,15 @@ import json
 import time
 
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from ...models import *
 from ...twitter_util import *
+
+from twitter import TwitterError
+from datetime import timedelta
+
+from pprint import pprint as p
 
 # Constants
 #screen_names = ['netflixhelps']
@@ -25,7 +31,8 @@ class Command(BaseCommand):
 
 	def handle(self, *args, **kwargs):
 		with open(log_file_name, 'a') as log:
-			now = datetime.now()
+			#now = datetime.now()
+			now = timezone.make_aware(datetime.now(), timezone.get_default_timezone())
 			start_str = now.strftime(now.strftime("%m/%W/%Y - %H:%M:%S"))
 			log.write("[*] Start: " + start_str + "\n")
 			print start_str
@@ -36,17 +43,18 @@ class Command(BaseCommand):
 					print "[*] Polling " + screen_name
 					print
 					find_reply_chains(screen_name)
-				except Exception as e:
+				except TwitterError as e:
 					print "[!] Rate Limit exceeded"
+					print e
 					print "[!] Sleeping for 15 minutes"
-					wake = now + datetime.timedelta(seconds=60 * 15)
+					wake = now + timedelta(seconds=60 * 15)
 					wake_str = wake.strftime(now.strftime("%m/%W/%Y - %H:%M:%S"))
 					print "[*] Will wake at " + wake_str
 					time.sleep(60 * 15)
 					print "[*] Resuming..."
 					print
 
-			now = datetime.now()
+			now =  timezone.make_aware(datetime.now(), timezone.get_default_timezone())
 			end_str = now.strftime(now.strftime("%m/%W/%Y - %H:%M:%S"))
 			log.write("End: " + end_str + "\n")
 			print "[*] End: " + end_str
