@@ -3,8 +3,8 @@ from nltk.tokenize import TweetTokenizer
 from ..twitter_api.models import *
 
 LOUD_MAX = 2
-
 tokenizer = TweetTokenizer()
+
 def tag_paralanguage(text):
 	tokens = tokenizer.tokenize(text)
 	print tokens
@@ -31,7 +31,8 @@ def tag_paralanguage(text):
 
 	return 0
 
-def generate_matrix():
+# Generate contingency table
+def generate_contingency_matrix():
 	matrix = [[],
 			 [],
 			 []]
@@ -49,3 +50,29 @@ def generate_matrix():
 	matrix[2][2] = matrix[0][2] + matrix[1][2]
 
 	return matrix
+
+def X_squared(observed, expected):
+	return (observed - (expected * expected)) / expected
+
+def generate_chi_matrix(table):
+	chi_matrix = [[],
+				  []]
+
+	total = table[2][2]
+	pc =    table[2][0] / total
+	no_pc = table[2][1] / total
+	pos =   table[0][2] / total
+	neg =   table[1][2] / total
+
+	chi_matrix[0][0] = pc * pos * total
+	chi_matrix[0][1] = no_pc * pos * total
+	chi_matrix[1][0] = pc * neg * total
+	chi_matrix[1][1] = no_pc * neg * total
+
+	# For loop!
+	chi_matrix[0][0] = X_squared(table[0][0], chi_matrix[0][0])
+	chi_matrix[0][1] = X_squared(table[0][1], chi_matrix[0][1])
+	chi_matrix[1][0] = X_squared(table[1][0], chi_matrix[1][0])
+	chi_matrix[1][1] = X_squared(table[1][1], chi_matrix[1][1])
+
+	return chi_matrix
