@@ -18,6 +18,7 @@ class Tweet(models.Model):
 	in_reply_to_status_id = models.CharField(max_length=32, null=True)
 	in_reply_to_screen_name = models.CharField(max_length=16, null=True)
 	sentiment_classification = models.IntegerField(null=True, blank=True)
+	paralanguage_classification = models.IntegerField(null=True, blank=True)
 
 	def __unicode__(self):
 		return self.tweet_text

@@ -2,13 +2,14 @@ import json
 import requests
 
 """
-
+	API class for Sentiment140, built to be used with the models defined in
+		../twitter_api/models.py
 """
 class Sentiment140API(object):
 	def __init__(self, appid):
 		# Constants
 		self.BASE_URL = "http://www.sentiment140.com/api/"
-		self.BULK_CLASSIFY_JSON_URL = "api/bulkClassifyJson"
+		self.BULK_CLASSIFY_JSON_URL = "bulkClassifyJson"
 		self.NEGATIVE = 0
 		self.NEUTRAL  = 2
 		self.POSITIVE = 4
@@ -31,7 +32,7 @@ class Sentiment140API(object):
 		conversations in which each group contains at most 5,000 Tweets between all
 		the TweetConversation's in the group.
 	"""
-	def group_conversations(conversations):
+	def group_conversations(self, conversations):
 		MAX = 5000
 		grouped_conversations = []
 		current_group = []
@@ -75,18 +76,21 @@ class Sentiment140API(object):
 		post_dict = {"data" : []}
 		return_dict = {}
 		request_url = self.__get_request_url("bulk_classify_conversations")
-
+		
 		for conversation in tweet_conversations:
 			for tweet in conversation.tweets.all():
 				post_dict['data'].append({
-					"text" : tweet.text,
+					"text" : tweet.tweet_text,
 					"tweet_id" : tweet.id,
 					"tweet_conversation_id" : conversation.id
 				})
 
+		#pp(post_dict)
 		response = requests.post(request_url, json=post_dict)
+		print response
 		response = response.json()
 
+		"""
 		for classified_tweet in response['data']:
 			tw_id = classified_tweet['tweet_conversation_id']
 			tw = return_dict.get(tw_id, False)
@@ -100,8 +104,10 @@ class Sentiment140API(object):
 				"tweet_id" : classified_tweet['tweet_id'],
 				"polarity" : classified_tweet['polarity']
 			})
-
 		return return_dict
+		"""
+
+		return response['data']
 
 	"""
 		Can take all TweetConversations and classify them all.
@@ -109,7 +115,7 @@ class Sentiment140API(object):
 	def bulk_classify_conversations(self, all_conversations):
 		conversations = self.group_conversations(all_conversations)
 
-		return [self.classified_conversations(conversation) for conversation in conversations]
+		return [self.classify_conversations(conversation) for conversation in conversations]
 
 
 """

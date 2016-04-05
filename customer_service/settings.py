@@ -49,6 +49,7 @@ INSTALLED_APPS = (
     'django.contrib.messages',
     'django.contrib.staticfiles',
 	'customer_service.twitter_api',
+	'customer_service.analysis',
 )
 
 MIDDLEWARE_CLASSES = (
