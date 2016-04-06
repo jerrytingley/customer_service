@@ -1,3 +1,5 @@
+from __future__ import division
+
 import datetime
 from urllib2 import urlopen
 from BeautifulSoup import BeautifulSoup
@@ -27,4 +29,4 @@ def get_remote_soup(url):
 def time_difference_min(dt_a, dt_b):
 	dt_difference = dt_a - dt_b
 
-	return dt_difference.seconds / 60
+	return (dt_difference.seconds // 60) % 60

@@ -1,4 +1,5 @@
 from nltk.tokenize import TweetTokenizer
+from pattern.en import sentiment
 
 from ..twitter_api.models import *
 from analysis_util import time_difference_min
@@ -31,10 +32,10 @@ def average_response_time(conversation):
 	return average
 
 def is_direct_mention(conversation):
-	first_tweet = conversation.objects.first()
+	first_tweet = conversation.tweets.first()
 
 	text = first_tweet.tweet_text
-	service_name = "@" + first_tweet.customer_service_screen_name
+	service_name = "@" + conversation.customer_service_screen_name
 
 	if service_name in text:
 		return 1
@@ -43,8 +44,8 @@ def is_direct_mention(conversation):
 def sentiment_scores(conversation):
 	tweets = conversation.tweets.all()
 
-	max_score = 0
-	min_score = 0
+	max_score = 0.0
+	min_score = 0.0
 	for tweet in tweets:
 		text = tweet.tweet_text
 		tokens = tokenizer.tokenize(text)
@@ -68,11 +69,11 @@ def get_day(conversation):
 # Pulls all features from a conversation.
 # Returns string to write to a CSV file.
 def pull_features(conversation):
-	average_response_time = average_response_time(conversation)
-	is_direct_mention = is_direct_mention(conversation)
-	sentiment_scores = sentiment_scores(conversation)
+	avg_time = average_response_time(conversation)
+	direct_mention = is_direct_mention(conversation)
+	sentiment = sentiment_scores(conversation)
 	depth = get_depth(conversation)
 	day = get_day(conversation)
 
-	return "{0},{1},{2},{3},{4},{5}\n".format(average_response_time, is_direct_mention,
-											  sentiment_scores[0], sentiment_scores[1], depth, day)
+	return "{0},{1},{2},{3},{4},{5}\n".format(avg_time, direct_mention,
+											  sentiment[0], sentiment[1], depth, day)

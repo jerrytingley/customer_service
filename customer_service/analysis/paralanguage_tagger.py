@@ -1,3 +1,5 @@
+from __future__ import division
+
 from nltk.tokenize import TweetTokenizer
 
 from ..twitter_api.models import *
@@ -7,7 +9,7 @@ tokenizer = TweetTokenizer()
 
 def tag_paralanguage(text):
 	tokens = tokenizer.tokenize(text)
-	print tokens
+	#print tokens
 
 	# Test for excessive punctuation
 	if text.count('!') > LOUD_MAX:
@@ -33,9 +35,9 @@ def tag_paralanguage(text):
 
 # Generate contingency table
 def generate_contingency_matrix():
-	matrix = [[],
-			 [],
-			 []]
+	matrix = [[0, 0, 0],
+			  [0, 0, 0],
+			  [0, 0, 0]]
 
 	matrix[0][0] = Tweet.objects.filter(sentiment_classification=4, paralanguage_classification=1).count()
 	matrix[0][1] = Tweet.objects.filter(sentiment_classification=4, paralanguage_classification=0).count()
@@ -51,12 +53,12 @@ def generate_contingency_matrix():
 
 	return matrix
 
-def X_squared(observed, expected):
-	return (observed - (expected * expected)) / expected
+def cell_value(observed, expected):
+	return ((observed - expected)**2) / expected
 
 def generate_chi_matrix(table):
-	chi_matrix = [[],
-				  []]
+	chi_matrix = [[0, 0],
+				  [0, 0]]
 
 	total = table[2][2]
 	pc =    table[2][0] / total
@@ -70,9 +72,9 @@ def generate_chi_matrix(table):
 	chi_matrix[1][1] = no_pc * neg * total
 
 	# For loop!
-	chi_matrix[0][0] = X_squared(table[0][0], chi_matrix[0][0])
-	chi_matrix[0][1] = X_squared(table[0][1], chi_matrix[0][1])
-	chi_matrix[1][0] = X_squared(table[1][0], chi_matrix[1][0])
-	chi_matrix[1][1] = X_squared(table[1][1], chi_matrix[1][1])
+	chi_matrix[0][0] = cell_value(table[0][0], chi_matrix[0][0])
+	chi_matrix[0][1] = cell_value(table[0][1], chi_matrix[0][1])
+	chi_matrix[1][0] = cell_value(table[1][0], chi_matrix[1][0])
+	chi_matrix[1][1] = cell_value(table[1][1], chi_matrix[1][1])
 
 	return chi_matrix
