@@ -9,7 +9,7 @@ better serve these customers, many of these companies provide a customer service
 to help their Twitter using customers with any problems that they may be having with the companies product or service.
 Custom software was written to poll the top four popular customer service accounts and pull out the conversations they were
 having with customers. For there, features were pulled from each conversation to a generate a dataset that was then
-used to train a logisitc regression model. This model is used to determine the probability that a conversation will yield
+used to train a logistic regression model. This model is used to determine the probability that a conversation will yield
 a positive correspondence based on the first Tweet as well as the probability that the user will respond at all to the
-customer service account. It's up to assign meaning to this data. For example, a company may choose to quickly respond to
-potential conversations that more likely to be negative or visa versa.
+customer service account. From there, it's up to the company to assign meaning to this data. For example, a company may 
+choose to quickly respond to potential conversations that more likely to be negative or visa versa.
